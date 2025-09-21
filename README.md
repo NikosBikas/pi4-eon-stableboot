@@ -23,17 +23,22 @@ This script applies a set of fixes and workarounds to address the Raspberry Pi 4
    cd pi4-eon-stableboot
    ```
 
-2. **Run the script as root:**
+2. **Make the script executable:**
    ```sh
-   sudo bash fix-pi4-reboot.sh
+   chmod +x fix-pi4-reboot.sh
    ```
 
-3. **Reboot your Pi:**
+3. **Run the script as root:**
+   ```sh
+   sudo ./fix-pi4-reboot.sh
+   ```
+
+4. **Reboot your Pi:**
    ```sh
    sudo reboot
    ```
 
-4. **(Recommended) Reboot twice more to confirm stability.**
+5. **(Recommended) Reboot twice more to confirm stability.**
 
 ## Troubleshooting
 
