@@ -18,7 +18,26 @@ apt-get update -y
 apt-get install -y \
   sg3-utils \
   uhubctl \
-  rpi-eeprom rpi-eeprom-images \
+  rpi-eeprom rpi-eeprom-images \# ...existing code...
+
+# ---------------------------
+# 0b) Check and update Raspberry Pi EEPROM (firmware/BIOS)
+# ---------------------------
+echo "--- Checking for latest Raspberry Pi EEPROM (firmware/BIOS) ..."
+if command -v rpi-eeprom-update >/dev/null; then
+  rpi-eeprom-update
+  if rpi-eeprom-update | grep -q "UPDATE REQUIRED"; then
+    echo ">>> EEPROM update required. Applying update ..."
+    rpi-eeprom-update -a
+    echo ">>> EEPROM update applied. Please reboot to complete the update."
+  else
+    echo ">>> EEPROM is already up to date."
+  fi
+else
+  echo "WARNING: rpi-eeprom-update not found. Skipping EEPROM firmware check."
+fi
+
+# ...existing code...
   libraspberrypi-bin \
   ca-certificates
 
@@ -27,7 +46,33 @@ apt-get install -y \
 # ---------------------------
 echo "--- Enabling persistent journald with limits ..."
 mkdir -p /var/log/journal
-chown root:systemd-journal /var/log/journal
+chown root:systemd-journal /var/log/journal# ...existing code...
+
+# Ensure config files exist before editing
+for f in /boot/firmware/config.txt /boot/firmware/cmdline.txt; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: $f does not exist. Aborting."
+    exit 1
+  fi
+done
+
+# ...existing code...
+
+# 7) Hardware watchdog safety net (auto-reset if reboot wedges)
+echo "--- Enabling hardware watchdog auto-recover (30s) ..."
+if grep -q '^RuntimeWatchdogSec=' /etc/systemd/system.conf; then
+  sed -i 's/^RuntimeWatchdogSec=.*/RuntimeWatchdogSec=30s/' /etc/systemd/system.conf
+else
+  echo 'RuntimeWatchdogSec=30s' >> /etc/systemd/system.conf
+fi
+if grep -q '^RebootWatchdogSec=' /etc/systemd/system.conf; then
+  sed -i 's/^RebootWatchdogSec=.*/RebootWatchdogSec=30s/' /etc/systemd/system.conf
+else
+  echo 'RebootWatchdogSec=30s' >> /etc/systemd/system.conf
+fi
+systemctl daemon-reexec || true
+
+# ...existing code...
 chmod 2755 /var/log/journal
 if grep -q '^Storage=' /etc/systemd/journald.conf; then
   sed -i 's/^Storage=.*/Storage=persistent/' /etc/systemd/journald.conf
