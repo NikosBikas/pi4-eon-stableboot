@@ -15,13 +15,17 @@ fi
 echo "--- Installing packages (sg3-utils, uhubctl, EEPROM tools, vcgencmd) ..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y \
-  sg3-utils \
-  uhubctl \
-  rpi-eeprom \
-  rpi-eeprom-images \
-  libraspberrypi-bin \
-  ca-certificates
+
+# Detect the right Raspberry Pi userland package set:
+#   - Bookworm/newer: raspi-utils* (provides vcgencmd, tvservice, etc.)
+#   - Older (Bullseye): libraspberrypi-bin
+if apt-cache show raspi-utils-core >/dev/null 2>&1; then
+  RP_USERLAND_PKGS="raspi-utils raspi-utils-core raspi-utils-dt"
+else
+  RP_USERLAND_PKGS="libraspberrypi-bin"
+fi
+
+apt-get install -y   sg3-utils   uhubctl   rpi-eeprom   rpi-eeprom-images   ca-certificates   $RP_USERLAND_PKGS
 
 # ---------------------------
 # 0b) Check and update Raspberry Pi EEPROM (firmware/BIOS)
@@ -177,12 +181,14 @@ if command -v uhubctl >/dev/null; then
   [[ -n "${DETECT:-}" ]] && HUB_LOC="$DETECT"
 fi
 
+UHUBCTL_BIN="$(command -v uhubctl || echo /usr/sbin/uhubctl)"
+
 cat >/usr/lib/systemd/system-shutdown/30-uhubctl-poweroff <<SH
 #!/bin/sh
 # Called with \$1 = halt|poweroff|reboot|kexec
 HUB="$HUB_LOC"
 PORTS="all"
-/usr/sbin/uhubctl -l \$HUB -p \$PORTS -a off >/dev/null 2>&1 || true
+"$UHUBCTL_BIN" -l \$HUB -p \$PORTS -a off >/dev/null 2>&1 || true
 sleep 3
 exit 0
 SH
@@ -211,7 +217,7 @@ systemctl daemon-reexec || true
 # ---------------------------
 echo
 echo "== Done. Applied fixes =="
-echo " - Packages: sg3-utils, uhubctl, rpi-eeprom(-images), libraspberrypi-bin"
+echo " - Packages: sg3-utils, uhubctl, rpi-eeprom(-images), Raspberry Pi userland tools"
 echo " - Journald: persistent (200M/50M, 30 days)"
 echo " - /boot/firmware/config.txt : boot_delay=1, dtparam=i2c_arm=on"
 echo " - /boot/firmware/cmdline.txt : usb-storage.quirks=1741:1156:u,174e:1155:u reboot=hard"
