@@ -16,16 +16,47 @@ echo "--- Installing packages (sg3-utils, uhubctl, EEPROM tools, vcgencmd) ..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 
-# Detect the right Raspberry Pi userland package set:
-#   - Bookworm/newer: raspi-utils* (provides vcgencmd, tvservice, etc.)
-#   - Older (Bullseye): libraspberrypi-bin
-if apt-cache show raspi-utils-core >/dev/null 2>&1; then
-  RP_USERLAND_PKGS="raspi-utils raspi-utils-core raspi-utils-dt"
-else
-  RP_USERLAND_PKGS="libraspberrypi-bin"
-fi
+# Detect distro codename to choose the correct userland packages
+. /etc/os-release || true
+CODENAME="${VERSION_CODENAME:-}"
+USERLAND_PKGS=""
 
-apt-get install -y   sg3-utils   uhubctl   rpi-eeprom   rpi-eeprom-images   ca-certificates   $RP_USERLAND_PKGS
+# Hard-block legacy userland on Bookworm and newer
+install -d /etc/apt/preferences.d
+cat >/etc/apt/preferences.d/99-rpi-userland-split.pref <<'EOF'
+Package: libraspberrypi*
+Pin: release *
+Pin-Priority: -1
+EOF
+
+apt-get update -y
+
+case "$CODENAME" in
+  bookworm|trixie|forky)
+    # Always use new split packages on Bookworm+
+    USERLAND_PKGS="raspi-utils raspi-utils-core raspi-utils-dt"
+    ;;
+  bullseye|buster|stretch)
+    # Older releases expect the legacy meta
+    USERLAND_PKGS="libraspberrypi-bin"
+    ;;
+  *)
+    # Fallback: prefer new split if present, else legacy
+    if apt-cache show raspi-utils-core >/dev/null 2>&1; then
+      USERLAND_PKGS="raspi-utils raspi-utils-core raspi-utils-dt"
+    else
+      USERLAND_PKGS="libraspberrypi-bin"
+    fi
+    ;;
+esac
+
+# Remove any stray legacy bits first (ignore errors)
+apt-get purge -y 'libraspberrypi*' || true
+
+# Now install the rest
+apt-get install -y --no-install-recommends \
+  sg3-utils uhubctl rpi-eeprom rpi-eeprom-images ca-certificates \
+  $USERLAND_PKGS
 
 # ---------------------------
 # 0b) Check and update Raspberry Pi EEPROM (firmware/BIOS)
